@@ -7,10 +7,11 @@ pubkey='zoloz-pub-key.pem'
 payload='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
 api='/api/v1/zoloz/authentication/test'
 reqtime=$(date +%F'T'%T%z)
+host='https://sg-production-api.zoloz.com'
 
 OPTIND=1
 #while getopts "h?vcPpatedf:" opt; do
-while getopts ":?hvet:p:P:c:" opt; do
+while getopts ":?hvet:p:P:c:d:H:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -33,6 +34,8 @@ while getopts ":?hvet:p:P:c:" opt; do
         then
             export LC_CTYPE=C; aeskey=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
         fi
+        ;;
+    H)  host=$OPTARG
         ;;
     d)  payload=$OPTARG
         ;;
@@ -88,22 +91,23 @@ echo "content: '$content'"
 signature=$(printf "$content" | openssl dgst -sign $privkey -keyform PEM -sha256 | base64)
 echo "signature: '$signature'"
 
+set -x
 if [ "$aeskey" != "" ] 
 then
   echo "curl \\
-    -H 'Content-Type: text/plain' \\
-    -H 'Client-Id: $clientid' \\
-    -H 'Request-Time: $reqtime' \\
-    -H 'Signature: algorithm=RSA256, signature=$signature' \\
-    -H 'Encryption: algorithm=RSA_AES, symmetricKey=$enckey' \\
-    -d '$body' \\
-    https://sg-production-api.zoloz.com/api/v1/zoloz/authentication/test"
+    -H "Content-Type: text/plain" \
+    -H "Client-Id: $clientid" \
+    -H "Request-Time: $reqtime" \
+    -H "Signature: algorithm=RSA256, signature=$signature" \
+    -H "Encryption: algorithm=RSA_AES, symmetricKey=$enckey" \
+    -d "$body" \
+    "$host$api"
 else
-  echo "curl \\
-    -H 'Content-Type: application/json; charset=UTF-8' \\
-    -H 'Client-Id: $clientid' \\
-    -H 'Request-Time: $reqtime' \\
-    -H 'Signature: algorithm=RSA256, signature=$signature' \\
-    -d '$body' \\
-    https://sg-production-api.zoloz.com/api/v1/zoloz/authentication/test"
+  curl \
+    -H "Content-Type: application/json; charset=UTF-8" \
+    -H "Client-Id: $clientid" \
+    -H "Request-Time: $reqtime" \
+    -H "Signature: algorithm=RSA256, signature=$signature" \
+    -d "$body" \
+    "$host$api"
 fi
