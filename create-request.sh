@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -x
+
 # Initialize variables default:
 clientid='2089012345678900'
 privkey='merchant-priv-key.pem'
@@ -7,11 +9,10 @@ pubkey='zoloz-pub-key.pem'
 payload='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
 api='/api/v1/zoloz/authentication/test'
 reqtime=$(date +%F'T'%T%z)
-echo "t1=$reqtime"
 
 OPTIND=1
 #while getopts "h?vcPpatedf:" opt; do
-while getopts "h?vt:" opt; do
+while getopts "h?vet:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -20,7 +21,6 @@ while getopts "h?vt:" opt; do
     v)  verbose=1
         ;;
     t)  reqtime=$OPTARG
-        echo "t2=$reqtime"
         ;;
     c)  clientid=$OPTARG
         ;;
@@ -31,7 +31,7 @@ while getopts "h?vt:" opt; do
     a)  api=$OPTARG
         ;;
     e)  aeskey=$OPTARG
-        if [ "$aeskey" == "" ] 
+        if [ "$aeskey" == "" ]
         then
             export LC_CTYPE=C; aeskey=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
         fi
