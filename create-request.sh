@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -x
-
 # Initialize variables default:
 clientid='2089012345678900'
 privkey='merchant-priv-key.pem'
@@ -12,7 +10,7 @@ reqtime=$(date +%F'T'%T%z)
 
 OPTIND=1
 #while getopts "h?vcPpatedf:" opt; do
-while getopts "h?vet:" opt; do
+while getopts ":?hvet:p:P:c:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -40,24 +38,32 @@ while getopts "h?vet:" opt; do
         ;;
     f)  infile=$OPTARG
         ;;
+    :)
+      echo "$0: Must supply an argument to -$OPTARG." >&2
+      exit 1
+      ;;
+    ?)
+      echo "Invalid option: -${OPTARG}."
+      exit 2
+      ;;
     esac
 done
 shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
-if [ "$clientid" == "" ] 
-then
-    echo "client id is specified." >&2
+if [ "$clientid" == "" ] ; then
+    echo "client id is not specified." >&2
+    exit -1
 fi
 
-if [ "$privkey" == "" ] 
-then
-    echo "merchant private key is specified." >&2
+if [ "$privkey" == "" ] ; then
+    echo "merchant private key is not specified." >&2
+    exit -1
 fi
 
-if [ "$pubkey" == "" ] 
-then
-    echo "zoloz private key is specified." >&2
+if [ "$pubkey" == "" ] ; then
+    echo "zoloz private key is not specified." >&2
+    exit -1
 fi
 
 echo "client id: $clientid"
