@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# set -x
+
 # Initialize variables default:
 clientid='2089012345678900'
 privkey='merchant-priv-key.pem'
@@ -8,10 +10,10 @@ payload='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
 api='/api/v1/zoloz/authentication/test'
 reqtime=$(date +%F'T'%T%z)
 host='https://sg-production-api.zoloz.com'
+encryption=0
 
 OPTIND=1
-#while getopts "h?vcPpatedf:" opt; do
-while getopts ":?hvet:p:P:c:d:H:" opt; do
+while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -29,13 +31,11 @@ while getopts ":?hvet:p:P:c:d:H:" opt; do
         ;;
     a)  api=$OPTARG
         ;;
-    e)  aeskey=$OPTARG
-        if [ "$aeskey" == "" ]
-        then
-            export LC_CTYPE=C; aeskey=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
-        fi
-        ;;
     H)  host=$OPTARG
+        ;;
+    e)  encryption=1
+        ;;
+    k)  aeskey=$OPTARG
         ;;
     d)  payload=$OPTARG
         ;;
@@ -72,36 +72,44 @@ fi
 echo "client id: $clientid"
 echo "merchant private key file: $privkey"
 echo "zoloz public key file: $pubkey"
-echo "api: $api"
 echo "request time: $reqtime"
+echo "host: $host"
+echo "api: $api"
 
-if [ "$aeskey" != "" ] 
-then
-  echo "aes128 key: 0x$aeskey"
-  enckey=$(printf $aeskey | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey zoloz-pub-key.pem | base64)
-  echo "encrypted aes128 key: $enckey"
-  body=$(printf "$payload" | openssl enc -e -aes-128-ecb -K $aeskey | base64)
+echo "encryption: $encryption"
+if [ "$encryption" == "1" ] ; then
+    if [ "$aeskey" == "" ] ; then
+        export LC_CTYPE=C; aeskey=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
+    fi
+    echo "aes128 key: 0x$aeskey"
+
+    enckey=$(printf $aeskey | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey zoloz-pub-key.pem | base64)
+    echo "encrypted aes128 key: $enckey"
+
+    body=$(printf "$payload" | openssl enc -e -aes-128-ecb -K $aeskey | base64)
 else
-  body="$payload"
+    body="$payload"
 fi
 
 content="POST $api\n$clientid.$reqtime.$body"
 echo "content: '$content'"
 
 signature=$(printf "$content" | openssl dgst -sign $privkey -keyform PEM -sha256 | base64)
-echo "signature: '$signature'"
+echo "signature: $signature"
 
-set -x
-if [ "$aeskey" != "" ] 
+url="$host$api"
+echo "url: $url"
+
+if [ "$encryption" == "1" ] 
 then
-  echo "curl \\
+  curl \
     -H "Content-Type: text/plain" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$signature" \
     -H "Encryption: algorithm=RSA_AES, symmetricKey=$enckey" \
     -d "$body" \
-    "$host$api"
+    "$url"
 else
   curl \
     -H "Content-Type: application/json; charset=UTF-8" \
@@ -109,5 +117,5 @@ else
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$signature" \
     -d "$body" \
-    "$host$api"
+    "$url"
 fi
