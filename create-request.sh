@@ -1,5 +1,16 @@
 #!/bin/sh
 
+urlsafe_encode() {
+  local length="${#1}"
+  for (( i = 0; i < length; i++ )); do
+    local c="${1:i:1}"
+    case $c in
+      [a-zA-Z0-9.~_-]) printf "$c" ;;
+    *) printf "$c" | xxd -p -c1 | while read x;do printf "%%%s" "$x";done
+  esac
+done
+}
+
 # set -x
 
 # Initialize variables default:
@@ -106,7 +117,7 @@ then
     -H "Content-Type: text/plain" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
-    -H "Signature: algorithm=RSA256, signature=$signature" \
+    -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
     -H "Encryption: algorithm=RSA_AES, symmetricKey=$enckey" \
     -d "$body" \
     "$url"
@@ -115,7 +126,7 @@ else
     -H "Content-Type: application/json; charset=UTF-8" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
-    -H "Signature: algorithm=RSA256, signature=$signature" \
+    -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
     -d "$body" \
     "$url"
 fi
