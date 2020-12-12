@@ -11,6 +11,11 @@ urlsafe_encode() {
 done
 }
 
+urlsafe_decode() {
+    local data=${1//+/ }
+    printf '%b' "${data//%/\x}"
+}
+
 # set -x
 
 # Initialize variables default:
@@ -113,20 +118,54 @@ echo "url: $url"
 
 if [ "$encryption" == "1" ] 
 then
-  curl \
+  respbody=$(curl \
     -H "Content-Type: text/plain" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    -H "Encryption: algorithm=RSA_AES, symmetricKey=$enckey" \
+    -H "Encryption: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
     -d "$body" \
-    "$url"
+    -s -D header \
+    "$url")
+  printf "$respbody" >> respbody
 else
-  curl \
+  printf "$body" > tmp
+  respbody=$(curl \
     -H "Content-Type: application/json; charset=UTF-8" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    -d "$body" \
-    "$url"
+    --data-binary @tmp \
+    -s -D header \
+    "$url")
+  printf "$respbody" >> respbody
 fi
+
+echo "response body: '$respbody'"
+resp_signature=$(grep -i 'signature: ' header | cut -f 2 -d ':' | cut -f 2 -d ',' | cut -f 2 -d '=')
+resp_signature=$(urlsafe_decode $resp_signature)
+echo "response signature: $resp_signature"
+resptime_header=$(grep -i 'response-time: ' header)
+echo "$resptime_header"
+resptime=${resptime_header##*": "}
+#echo "$(hexdump -e '"%X"' <<< "$resptime")"
+resptime=$(printf "$resptime" | tr -d '\r\n')
+#echo "$(hexdump -e '"%X"' <<< "$resptime")"
+echo "response time: $resptime"
+
+echo "$api"
+echo "$clientid"
+echo "$resptime"
+echo "$respbody"
+content="POST "$api"\n"$clientid"."$resptime".""$respbody"
+echo "content to be verified: '$content'"
+
+printf $resp_signature \
+| base64 -d \
+> resp_signature.bin #save the signature of response into resp_signature.bin file
+
+# verify the signature using zoloz public key
+printf "$content" \
+| openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature resp_signature.bin
+
+
