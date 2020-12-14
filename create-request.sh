@@ -16,6 +16,28 @@ urlsafe_decode() {
     printf '%b' "${data//%/\x}"
 }
 
+parse_header() {
+  local header_file=${1//+/ }
+  local header_key=${2//+/ }
+  local subkey=${3//+/ }
+  local header_line=$(grep "$header_key: " "$header_file" | head -1 | tr -d '\r\n')
+  local header_val=${header_line##*": "}
+  if [ "$subkey" == "" ] ; then
+    echo "$header_val"
+  else
+    remain=$header_val", "
+    while [[ $remain ]]; do
+      subitem=${remain%%", "*};
+      if [ "${subitem%%"="*}" == "$subkey" ] ; then
+        subval=${subitem#*"="}
+        break;
+      fi
+      remain=${remain#*", "};
+    done;
+    echo "$subval"
+  fi
+}
+
 # set -x
 
 # Initialize variables default:
@@ -99,7 +121,7 @@ if [ "$encryption" == "1" ] ; then
     fi
     echo "aes128 key: 0x$aeskey"
 
-    enckey=$(printf $aeskey | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey zoloz-pub-key.pem | base64)
+    enckey=$(printf $aeskey | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey "$pubkey" | base64)
     echo "encrypted aes128 key: $enckey"
 
     body=$(printf "$payload" | openssl enc -e -aes-128-ecb -K $aeskey | base64)
@@ -118,45 +140,37 @@ echo "url: $url"
 
 if [ "$encryption" == "1" ] 
 then
-  respbody=$(curl \
+  curl \
     -H "Content-Type: text/plain" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    -H "Encryption: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
+    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
     -d "$body" \
     -s -D header \
-    "$url")
+    -o respbody \
+    "$url"
   printf "$respbody" >> respbody
 else
   printf "$body" > tmp
-  respbody=$(curl \
+  curl \
     -H "Content-Type: application/json; charset=UTF-8" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
     --data-binary @tmp \
     -s -D header \
-    "$url")
-  printf "$respbody" >> respbody
+    -o respbody \
+    "$url"
 fi
 
+respbody=$(cat respbody)
 echo "response body: '$respbody'"
-resp_signature=$(grep -i 'signature: ' header | cut -f 2 -d ':' | cut -f 2 -d ',' | cut -f 2 -d '=')
-resp_signature=$(urlsafe_decode $resp_signature)
+resp_signature=$(urlsafe_decode $(parse_header header "signature" "signature"))
 echo "response signature: $resp_signature"
-resptime_header=$(grep -i 'response-time: ' header)
-echo "$resptime_header"
-resptime=${resptime_header##*": "}
-#echo "$(hexdump -e '"%X"' <<< "$resptime")"
-resptime=$(printf "$resptime" | tr -d '\r\n')
-#echo "$(hexdump -e '"%X"' <<< "$resptime")"
+resptime=$(parse_header header "response-time")
 echo "response time: $resptime"
 
-echo "$api"
-echo "$clientid"
-echo "$resptime"
-echo "$respbody"
 content="POST "$api"\n"$clientid"."$resptime".""$respbody"
 echo "content to be verified: '$content'"
 
@@ -165,7 +179,22 @@ printf $resp_signature \
 > resp_signature.bin #save the signature of response into resp_signature.bin file
 
 # verify the signature using zoloz public key
-printf "$content" \
-| openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature resp_signature.bin
+verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature resp_signature.bin)
+echo $verify_resp
 
+if [ "$verify_resp" != "Verified OK" ] ; then
+  exit -1
+fi
 
+resp_content_type=$(parse_header header "content-type")
+echo "response content type: $resp_content_type"
+if [[ "$resp_content_type" == *"text/plain"* ]] ; then
+  resp_enckey=$(urlsafe_decode $(parse_header header "encrypt" "symmetricKey"))
+  echo "response encrypted symmetric key: $resp_enckey"
+  resp_aeskey=$(printf "$resp_enckey" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$privkey" | xxd -u -p)
+  echo "response symmetric key: 0x$resp_aeskey"
+  resp_content=$(printf "$respbody" | base64 -d | openssl enc -d -aes-128-ecb -K "$resp_aeskey")
+else
+  resp_content=$respbody
+fi
+echo "response content: $resp_content"
