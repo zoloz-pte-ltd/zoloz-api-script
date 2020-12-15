@@ -37,20 +37,15 @@ parse_header() {
   fi
 }
 
-# set -x
-
 # Initialize variables default:
-CLIENT_ID='2089012345678900'
-MERCHANT_PRIVATE_KEY_FILE='merchant-priv-key.pem'
-ZOLOZ_PUBLIC_KEY_FILE='zoloz-pub-key.pem'
-REQ_DATA='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
 API_PATH='/api/v1/zoloz/authentication/test'
-REQ_TIME=$(date +%F'T'%T%z)
 API_HOST='https://sg-production-api.zoloz.com'
+REQ_TIME=$(date +%F'T'%T%z)
 ENCRYPTION=0
+VERBOSE=0
 
 OPTIND=1
-while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:l" opt; do
+while getopts ":?hvc:p:P:c:a:d:H:ek:t:l" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -75,8 +70,6 @@ while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:l" opt; do
     k)  REQ_AES_KEY=$OPTARG
         ;;
     d)  REQ_DATA=$OPTARG
-        ;;
-    f)  IN_FILE=$OPTARG
         ;;
     l)  SKIP_RESP_VERIFY=1
         ;;
@@ -108,6 +101,15 @@ if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
     exit -1
 fi
 
+if [[ "$REQ_DATA" == "" ]] ; then
+  read REQ_DATA
+else
+  if [[ "$REQ_DATA" == @* ]] ; then
+    REQ_INPUT_FILE=${REQ_DATA:1}
+    REQ_DATA=$(cat "$REQ_INPUT_FILE")
+  fi
+fi
+
 echo "client id: $CLIENT_ID"
 echo "merchant private key file: $MERCHANT_PRIVATE_KEY_FILE"
 echo "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
@@ -129,7 +131,7 @@ if [ "$ENCRYPTION" == "1" ] ; then
 else
     REQ_BODY="$REQ_DATA"
 fi
-echo "request body: '$RESP_BODY'"
+echo "request body: '$REQ_BODY'"
 
 REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
 echo "request content to be signed: '$REQ_SIGN_CONTENT'"
