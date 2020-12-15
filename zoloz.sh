@@ -40,20 +40,20 @@ parse_header() {
 
 error() {
   local content=${1//+/ }
-  echo "$content" >&2
+  echo $"$content" >&2
 }
 
 info() {
   local content=${1//+/ }
   if [ $VERBOSE -gt 0 ] ; then
-    echo "$content" | sed 's/^/\> /' >&2
+    echo $"$content" | sed 's/^/\> /' >&2
   fi
 }
 
 debug() {
   local content=${1//+/ }
   if [ $VERBOSE -gt 1 ] ; then
-    echo "$content" | sed 's/^/\>\> /' >&2
+    echo $"$content" | sed 's/^/\>\> /' >&2
   fi
 }
 
@@ -117,7 +117,7 @@ if [ "$MERCHANT_PRIVATE_KEY_FILE" == "" ] ; then
 fi
 
 if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
-    echo "zoloz private key is not specified." >&2
+    error "zoloz private key is not specified."
     exit 3
 fi
 
@@ -131,14 +131,19 @@ else
 fi
 
 info "verbose: $VERBOSE"
+info
+
 info "client id: $CLIENT_ID"
 info "merchant private key file: $MERCHANT_PRIVATE_KEY_FILE"
 info "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
 info "api host: $API_HOST"
 info "api path: $API_PATH"
 info "request time: $REQ_TIME"
+info
+
 info "request data length: ${#REQ_DATA}"
 debug "request data: '$REQ_DATA'"
+info
 
 info "encryption: $ENCRYPTION"
 if [ "$ENCRYPTION" == "1" ] ; then
@@ -157,21 +162,22 @@ if [ "$ENCRYPTION" == "1" ] ; then
 else
     REQ_BODY="$REQ_DATA"
 fi
+info
+
 info "request body length: ${#REQ_BODY}"
 debug "request body: '$REQ_BODY'"
+info
 
 REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
 debug "request content to be signed: '$REQ_SIGN_CONTENT'"
-
 REQ_SIGNATURE=$(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64)
 info "request signature: $REQ_SIGNATURE"
-
 URLENCODED_REQ_SIGNATURE=$(urlsafe_encode $REQ_SIGNATURE)
 info "urlencoded request signature: $URLENCODED_REQ_SIGNATURE"
+info
+
 
 RESP_HEADER_FILE=$(mktemp)
-info "temporary response header file: $RESP_HEADER_FILE"
-
 if [ "$ENCRYPTION" == "1" ] 
 then
   RESP_BODY=$(curl \
@@ -194,15 +200,19 @@ else
     "$API_HOST$API_PATH")
 fi
 
-info "response body length: ${#RESP_BODY}"
-debug "response body: '$RESP_BODY'"
+info "temporary response header file: $RESP_HEADER_FILE"
 RESP_HEADER=$(cat "$RESP_HEADER_FILE")
 debug $"response header: $RESP_HEADER"
+info
+
+info "response body length: ${#RESP_BODY}"
+debug "response body: '$RESP_BODY'"
+info
+
 RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
 info "response signature: $RESP_SIGNATURE"
 RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
 info "response time: $RESP_TIME"
-
 RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
 debug "response content to be verified: '$RESP_SIGN_CONTENT'"
 
@@ -215,6 +225,7 @@ else
     exit 4
   fi
 fi
+info
 
 RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "content-type")
 info "response content type: '$RESP_CONTENT_TYPE'"
@@ -229,5 +240,6 @@ else
 fi
 info "response content length: ${#RESP_DATA}"
 debug "response content: $RESP_DATA"
+info
 
 printf "$RESP_DATA"
