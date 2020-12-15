@@ -197,6 +197,11 @@ else
     "$API_HOST$API_PATH")
 fi
 
+if [ "$?" != "0" ] ; then
+  error "failed to request $API_HOST$API_PATH"
+  exit 4
+fi
+
 info "temporary response header file: $RESP_HEADER_FILE"
 RESP_HEADER=$(cat "$RESP_HEADER_FILE")
 debug $"response header: $RESP_HEADER"
@@ -219,7 +224,7 @@ else
   RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
   if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
     error "verify response signature: $RESP_VERIFY_RESULT"
-    exit 4
+    exit 5
   fi
 fi
 info
