@@ -8,12 +8,41 @@ urlsafe_encode() {
       [a-zA-Z0-9.~_-]) printf "$c" ;;
     *) printf "$c" | xxd -p -c1 | while read x;do printf "%%%s" "$x";done
   esac
-done
+  done
 }
 
 urlsafe_decode() {
   local data=${1//+/ }
   printf '%b' "${data//%/\x}"
+}
+
+show_help() {
+  echo '
+    SYNOPSIS
+    zoloz.sh [-h|-?]
+    zoloz.sh [-v|-vv] <-c <client id>> <-P <merchant private key file> <-p <zoloz public key file> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
+
+    DESCRIPTION
+    This is a utility script to call ZOLOZ API.
+
+    OPTIONS
+    -c <client id>                  Set client Id
+    -P <merchant private key file>  Set merchant private key
+    -p <zoloz public key file>      Set zoloz public key
+    -H <API host>                   Set API host (default=https://sg-production-api.zoloz.com)
+    -a <API path>                   Set API path (default=/api/v1/zoloz/authentication/test)
+    -d <request data|@data file>    Set request data or data file (starts with '@'), if not specified, will read request data from stdin
+    -e                              Disable request encryption
+    -i                              Ignore failure on verifying response signature
+    -k <AES128 key>                 For debugging, use specified AES128 key to encrypt request instead of a randomly generated key
+    -t <request time>               For debugging, use specified request time instead of current time
+    -v                              More verbose
+    -h                              Print this help
+
+    EXAMPLES
+    zoloz.sh -h
+    zoloz.sh -c '2188486771412389' -P 'merchant_private_key-sit.pem' -p 'zoloz_public_key-sit.pem' -d '{"foo": "bar"}'
+'
 }
 
 parse_header() {
@@ -55,50 +84,46 @@ debug() {
 }
 
 # Initialize variables default:
+VERBOSE=0
 API_PATH='/api/v1/zoloz/authentication/test'
 API_HOST='https://sg-production-api.zoloz.com'
 REQ_TIME=$(date +%F'T'%T%z)
-ENCRYPTION=0
-VERBOSE=0
+ENCRYPTION=1
 
 OPTIND=1
-while getopts ":?hvc:p:P:c:a:d:H:ek:t:l" opt; do
-    case "$opt" in
-    h|\?)
-        show_help
-        exit 0
-        ;;
-    v)  VERBOSE=$(($VERBOSE + 1))
-        ;;
-    t)  REQ_TIME=$OPTARG
-        ;;
-    c)  CLIENT_ID=$OPTARG
-        ;;
-    P)  MERCHANT_PRIVATE_KEY_FILE=$OPTARG
-        ;;
-    p)  ZOLOZ_PUBLIC_KEY_FILE=$OPTARG
-        ;;
-    a)  API_PATH=$OPTARG
-        ;;
-    H)  API_HOST=$OPTARG
-        ;;
-    e)  ENCRYPTION=1
-        ;;
-    k)  REQ_AES_KEY=$OPTARG
-        ;;
-    d)  REQ_DATA=$OPTARG
-        ;;
-    l)  SKIP_RESP_VERIFY=1
-        ;;
-    :)
-      error "$0: must supply an argument to -$OPTARG."
-      exit 1
-      ;;
-    ?)
-      error "invalid option: -${OPTARG}."
-      exit 2
-      ;;
-    esac
+while getopts ":?hvc:p:P:H:a:d:eik:t:" opt; do
+  case "$opt" in
+  h|\?)
+    show_help
+    exit 0
+    ;;
+  v)  VERBOSE=$(($VERBOSE + 1))
+    ;;
+  c)  CLIENT_ID=$OPTARG
+    ;;
+  P)  MERCHANT_PRIVATE_KEY_FILE=$OPTARG
+    ;;
+  p)  ZOLOZ_PUBLIC_KEY_FILE=$OPTARG
+    ;;
+  H)  API_HOST=$OPTARG
+    ;;
+  a)  API_PATH=$OPTARG
+    ;;
+  d)  REQ_DATA=$OPTARG
+    ;;
+  e)  ENCRYPTION=0
+    ;;
+  i)  SKIP_RESP_VERIFY=1
+    ;;
+  k)  REQ_AES_KEY=$OPTARG
+    ;;
+  t)  REQ_TIME=$OPTARG
+    ;;
+  :)
+    error "$0: must supply an argument to -$OPTARG."
+    exit 1
+    ;;
+  esac
 done
 shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
