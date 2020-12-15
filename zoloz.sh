@@ -243,16 +243,16 @@ info "response body length: ${#RESP_BODY}"
 debug "response body: '$RESP_BODY'"
 info
 
-RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
-info "response signature: $RESP_SIGNATURE"
-RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
-info "response time: $RESP_TIME"
-RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
-debug "response content to be verified: '$RESP_SIGN_CONTENT'"
-
 if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
   info "skip verifying response signature" >&2
 else
+  RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
+  info "response signature: $RESP_SIGNATURE"
+  RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
+  info "response time: $RESP_TIME"
+  RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
+  debug "response content to be verified: '$RESP_SIGN_CONTENT'"
+
   RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
   if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
     error "verify response signature: $RESP_VERIFY_RESULT"
