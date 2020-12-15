@@ -50,7 +50,7 @@ host='https://sg-production-api.zoloz.com'
 encryption=0
 
 OPTIND=1
-while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:" opt; do
+while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:l" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -77,6 +77,8 @@ while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:" opt; do
     d)  payload=$OPTARG
         ;;
     f)  infile=$OPTARG
+        ;;
+    l)  skip_response_validation=1
         ;;
     :)
       echo "$0: Must supply an argument to -$OPTARG." >&2
@@ -137,6 +139,9 @@ echo "signature: $signature"
 url="$host$api"
 echo "url: $url"
 
+resp_header_file=$(mktemp)
+echo "temporary response header file: $resp_header_file"
+
 if [ "$encryption" == "1" ] 
 then
   respbody=$(curl \
@@ -146,7 +151,7 @@ then
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
     -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
     -d "$body" \
-    -s -D header \
+    -s -D "$resp_header_file" \
     "$url")
 else
   respbody=$(curl \
@@ -155,31 +160,36 @@ else
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
     --data-binary @<(printf "$body") \
-    -s -D header \
+    -s -D "$resp_header_file" \
     "$url")
 fi
 
 echo "response body: '$respbody'"
-resp_signature=$(urlsafe_decode $(parse_header header "signature" "signature"))
+resp_header=$(cat "$resp_header_file")
+echo $"response header: \n$resp_header"
+resp_signature=$(urlsafe_decode $(parse_header "$resp_header_file" "signature" "signature"))
 echo "response signature: $resp_signature"
-resptime=$(parse_header header "response-time")
+resptime=$(parse_header "$resp_header_file" "response-time")
 echo "response time: $resptime"
 
 content="POST "$api"\n"$clientid"."$resptime".""$respbody"
 echo "content to be verified: '$content'"
 
-# verify the signature using zoloz public key
-verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature <(printf $resp_signature | base64 -d))
-echo $verify_resp
-
-if [ "$verify_resp" != "Verified OK" ] ; then
-  exit -1
+if [ "$skip_response_validation" == "1" ] ; then
+  echo "skip response validation" >&2
+else
+  # verify the signature using zoloz public key
+  verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature <(printf $resp_signature | base64 -d))
+  echo $verify_resp
+  if [ "$verify_resp" != "Verified OK" ] ; then
+    exit -1
+  fi
 fi
 
-resp_content_type=$(parse_header header "content-type")
+resp_content_type=$(parse_header "$resp_header_file" "content-type")
 echo "response content type: $resp_content_type"
 if [[ "$resp_content_type" == *"text/plain"* ]] ; then
-  resp_enckey=$(urlsafe_decode $(parse_header header "encrypt" "symmetricKey"))
+  resp_enckey=$(urlsafe_decode $(parse_header "$resp_header_file" "encrypt" "symmetricKey"))
   echo "response encrypted symmetric key: $resp_enckey"
   resp_aeskey=$(printf "$resp_enckey" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$privkey" | xxd -u -p)
   echo "response symmetric key: 0x$resp_aeskey"
