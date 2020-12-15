@@ -31,7 +31,7 @@ show_help() {
     -p <zoloz public key file>      Set zoloz public key
     -H <API host>                   Set API host (default=https://sg-production-api.zoloz.com)
     -a <API path>                   Set API path (default=/api/v1/zoloz/authentication/test)
-    -d <request data|@data file>    Set request data or data file (starts with '@'), if not specified, will read request data from stdin
+    -d <request data or data file>  Set request data or data file (set file by prepend @), if not specified, will read request data from stdin
     -e                              Disable request encryption
     -i                              Ignore failure on verifying response signature
     -k <AES128 key>                 For debugging, use specified AES128 key to encrypt request instead of a randomly generated key
@@ -41,7 +41,9 @@ show_help() {
 
     EXAMPLES
     zoloz.sh -h
-    zoloz.sh -c '2188486771412389' -P 'merchant_private_key-sit.pem' -p 'zoloz_public_key-sit.pem' -d '{"foo": "bar"}'
+    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
+    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d '"'"'{"foo": "bar"}'"'"'
+    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d request_data.txt
 '
 }
 
@@ -89,6 +91,11 @@ API_PATH='/api/v1/zoloz/authentication/test'
 API_HOST='https://sg-production-api.zoloz.com'
 REQ_TIME=$(date +%F'T'%T%z)
 ENCRYPTION=1
+
+if [ $# -eq 0 ]; then
+  show_help
+  exit 0
+fi
 
 OPTIND=1
 while getopts ":?hvc:p:P:H:a:d:eik:t:" opt; do
