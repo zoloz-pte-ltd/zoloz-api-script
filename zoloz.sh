@@ -22,7 +22,7 @@ parse_header() {
   local header_line=$(grep "$header_key: " "$header_file" | head -1 | tr -d '\r\n')
   local header_val=${header_line##*": "}
   if [ "$subkey" == "" ] ; then
-    echo "$header_val"
+    echo -n "$header_val"
   else
     remain=$header_val", "
     while [[ $remain ]]; do
@@ -33,7 +33,26 @@ parse_header() {
       fi
       remain=${remain#*", "};
     done;
-    echo "$subval"
+    echo -n "$subval"
+  fi
+}
+
+error() {
+  local content=${1//+/ }
+  echo "$content" >&2
+}
+
+info() {
+  local content=${1//+/ }
+  if [ $VERBOSE -gt 0 ] ; then
+    echo "> $content" >&2
+  fi
+}
+
+debug() {
+  local content=${1//+/ }
+  if [ $VERBOSE -gt 1 ] ; then
+    echo "$content" >&2
   fi
 }
 
@@ -51,7 +70,7 @@ while getopts ":?hvc:p:P:c:a:d:H:ek:t:l" opt; do
         show_help
         exit 0
         ;;
-    v)  VERBOSE=1
+    v)  VERBOSE=$(($VERBOSE + 1))
         ;;
     t)  REQ_TIME=$OPTARG
         ;;
@@ -74,11 +93,11 @@ while getopts ":?hvc:p:P:c:a:d:H:ek:t:l" opt; do
     l)  SKIP_RESP_VERIFY=1
         ;;
     :)
-      echo "$0: Must supply an argument to -$OPTARG." >&2
+      error "$0: must supply an argument to -$OPTARG."
       exit 1
       ;;
     ?)
-      echo "Invalid option: -${OPTARG}."
+      error "invalid option: -${OPTARG}."
       exit 2
       ;;
     esac
@@ -87,18 +106,18 @@ shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
 if [ "$CLIENT_ID" == "" ] ; then
-    echo "client id is not specified." >&2
-    exit -1
+    error "client id is not specified."
+    exit 3
 fi
 
 if [ "$MERCHANT_PRIVATE_KEY_FILE" == "" ] ; then
-    echo "merchant private key is not specified." >&2
-    exit -1
+    error "merchant private key is not specified."
+    exit 3
 fi
 
 if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
     echo "zoloz private key is not specified." >&2
-    exit -1
+    exit 3
 fi
 
 if [[ "$REQ_DATA" == "" ]] ; then
@@ -110,37 +129,38 @@ else
   fi
 fi
 
-echo "client id: $CLIENT_ID"
-echo "merchant private key file: $MERCHANT_PRIVATE_KEY_FILE"
-echo "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
-echo "api host: $API_HOST"
-echo "api path: $API_PATH"
-echo "request time: $REQ_TIME"
+info "verbose: $VERBOSE"
+info "client id: $CLIENT_ID"
+info "merchant private key file: $MERCHANT_PRIVATE_KEY_FILE"
+info "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
+info "api host: $API_HOST"
+info "api path: $API_PATH"
+info "request time: $REQ_TIME"
 
-echo "encryption: $ENCRYPTION"
+info "encryption: $ENCRYPTION"
 if [ "$ENCRYPTION" == "1" ] ; then
     if [ "$REQ_AES_KEY" == "" ] ; then
         export LC_CTYPE=C; REQ_AES_KEY=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
     fi
-    echo "aes128 key: 0x$REQ_AES_KEY"
+    info "aes128 key: 0x$REQ_AES_KEY"
 
     REQ_ENCRYPTED_AES_KEY=$(printf $REQ_AES_KEY | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey "$ZOLOZ_PUBLIC_KEY_FILE" | base64)
-    echo "encrypted aes128 key: $REQ_ENCRYPTED_AES_KEY"
+    info "encrypted aes128 key: $REQ_ENCRYPTED_AES_KEY"
 
     REQ_BODY=$(printf "$REQ_DATA" | openssl enc -e -aes-128-ecb -K $REQ_AES_KEY | base64)
 else
     REQ_BODY="$REQ_DATA"
 fi
-echo "request body: '$REQ_BODY'"
+info "request body: '$REQ_BODY'"
 
 REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
-echo "request content to be signed: '$REQ_SIGN_CONTENT'"
+info "request content to be signed: '$REQ_SIGN_CONTENT'"
 
 REQ_SIGNATURE=$(urlsafe_encode $(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64))
-echo "request signature: $REQ_SIGNATURE"
+info "request signature: $REQ_SIGNATURE"
 
 RESP_HEADER_FILE=$(mktemp)
-echo "temporary response header file: $RESP_HEADER_FILE"
+info "temporary response header file: $RESP_HEADER_FILE"
 
 if [ "$ENCRYPTION" == "1" ] 
 then
@@ -164,36 +184,38 @@ else
     "$API_HOST$API_PATH")
 fi
 
-echo "response body: '$RESP_BODY'"
+info "response body: '$RESP_BODY'"
 RESP_HEADER=$(cat "$RESP_HEADER_FILE")
-echo $"response header: \n$RESP_HEADER"
+info $"response header: \n$RESP_HEADER"
 RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
-echo "response signature: $RESP_SIGNATURE"
+info "response signature: $RESP_SIGNATURE"
 RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
-echo "response time: $RESP_TIME"
+info "response time: $RESP_TIME"
 
 RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
-echo "response content to be verified: '$RESP_SIGN_CONTENT'"
+info "response content to be verified: '$RESP_SIGN_CONTENT'"
 
 if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
-  echo "skip verifying response signature" >&2
+  info "skip verifying response signature" >&2
 else
   RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
-  echo "verify response signature: $RESP_VERIFY_RESULT"
   if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
-    exit -1
+    error "verify response signature: $RESP_VERIFY_RESULT"
+    exit 4
   fi
 fi
 
 RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "content-type")
-echo "response content type: $RESP_CONTENT_TYPE"
+info "response content type: $RESP_CONTENT_TYPE"
 if [[ "$RESP_CONTENT_TYPE" == *"text/plain"* ]] ; then
   RESP_ENCRYPTED_AES_KEY=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "encrypt" "symmetricKey"))
-  echo "response encrypted symmetric key: $RESP_ENCRYPTED_AES_KEY"
+  info "response encrypted symmetric key: $RESP_ENCRYPTED_AES_KEY"
   RESP_AES_KEY=$(printf "$RESP_ENCRYPTED_AES_KEY" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$MERCHANT_PRIVATE_KEY_FILE" | xxd -u -p)
-  echo "response symmetric key: 0x$RESP_AES_KEY"
+  info "response symmetric key: 0x$RESP_AES_KEY"
   RESP_DATA=$(printf "$RESP_BODY" | base64 -d | openssl enc -d -aes-128-ecb -K "$RESP_AES_KEY")
 else
   RESP_DATA=$RESP_BODY
 fi
-echo "response content: $RESP_DATA"
+info "response content: $RESP_DATA"
+
+printf "$RESP_DATA"
