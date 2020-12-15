@@ -52,7 +52,7 @@ info() {
 debug() {
   local content=${1//+/ }
   if [ $VERBOSE -gt 1 ] ; then
-    echo "$content" >&2
+    echo "$content" | sed 's/^/\>\> /' >&2
   fi
 }
 
@@ -136,6 +136,8 @@ info "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
 info "api host: $API_HOST"
 info "api path: $API_PATH"
 info "request time: $REQ_TIME"
+info "request data length: ${#REQ_DATA}"
+debug "request data: '$REQ_DATA'"
 
 info "encryption: $ENCRYPTION"
 if [ "$ENCRYPTION" == "1" ] ; then
@@ -151,10 +153,11 @@ if [ "$ENCRYPTION" == "1" ] ; then
 else
     REQ_BODY="$REQ_DATA"
 fi
-info "request body: '$REQ_BODY'"
+info "request body length: ${#REQ_BODY}"
+debug "request body: '$REQ_BODY'"
 
 REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
-info "request content to be signed: '$REQ_SIGN_CONTENT'"
+debug "request content to be signed: '$REQ_SIGN_CONTENT'"
 
 REQ_SIGNATURE=$(urlsafe_encode $(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64))
 info "request signature: $REQ_SIGNATURE"
@@ -184,16 +187,17 @@ else
     "$API_HOST$API_PATH")
 fi
 
-info "response body: '$RESP_BODY'"
+info "response body length: ${#RESP_BODY}"
+debug "response body: '$RESP_BODY'"
 RESP_HEADER=$(cat "$RESP_HEADER_FILE")
-info $"response header: \n$RESP_HEADER"
+debug $"response header: $RESP_HEADER"
 RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
 info "response signature: $RESP_SIGNATURE"
 RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
 info "response time: $RESP_TIME"
 
 RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
-info "response content to be verified: '$RESP_SIGN_CONTENT'"
+debug "response content to be verified: '$RESP_SIGN_CONTENT'"
 
 if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
   info "skip verifying response signature" >&2
@@ -216,6 +220,7 @@ if [[ "$RESP_CONTENT_TYPE" == *"text/plain"* ]] ; then
 else
   RESP_DATA=$RESP_BODY
 fi
-info "response content: $RESP_DATA"
+info "response content length: ${#RESP_DATA}"
+debug "response content: $RESP_DATA"
 
 printf "$RESP_DATA"
