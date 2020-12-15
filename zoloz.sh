@@ -1,4 +1,5 @@
 #!/bin/bash 
+
 urlsafe_encode() {
   local length="${#1}"
   for (( i = 0; i < length; i++ )); do
@@ -149,6 +150,9 @@ if [ "$ENCRYPTION" == "1" ] ; then
     REQ_ENCRYPTED_AES_KEY=$(printf $REQ_AES_KEY | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey "$ZOLOZ_PUBLIC_KEY_FILE" | base64)
     info "encrypted aes128 key: $REQ_ENCRYPTED_AES_KEY"
 
+    URLENCODED_REQ_ENCRYPTED_AES_KEY=$(urlsafe_encode "$REQ_ENCRYPTED_AES_KEY")
+    info "urlencoded encrypted aes128 key: $URLENCODED_REQ_ENCRYPTED_AES_KEY"
+
     REQ_BODY=$(printf "$REQ_DATA" | openssl enc -e -aes-128-ecb -K $REQ_AES_KEY | base64)
 else
     REQ_BODY="$REQ_DATA"
@@ -159,8 +163,11 @@ debug "request body: '$REQ_BODY'"
 REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
 debug "request content to be signed: '$REQ_SIGN_CONTENT'"
 
-REQ_SIGNATURE=$(urlsafe_encode $(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64))
+REQ_SIGNATURE=$(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64)
 info "request signature: $REQ_SIGNATURE"
+
+URLENCODED_REQ_SIGNATURE=$(urlsafe_encode $REQ_SIGNATURE)
+info "urlencoded request signature: $URLENCODED_REQ_SIGNATURE"
 
 RESP_HEADER_FILE=$(mktemp)
 info "temporary response header file: $RESP_HEADER_FILE"
@@ -171,8 +178,8 @@ then
     -H "Content-Type: text/plain" \
     -H "Client-Id: $CLIENT_ID" \
     -H "Request-Time: $REQ_TIME" \
-    -H "Signature: algorithm=RSA256, signature=$REQ_SIGNATURE" \
-    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $REQ_ENCRYPTED_AES_KEY)" \
+    -H "Signature: algorithm=RSA256, signature=$URLENCODED_REQ_SIGNATURE" \
+    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$URLENCODED_REQ_ENCRYPTED_AES_KEY" \
     -d "$REQ_BODY" \
     -s -D "$RESP_HEADER_FILE" \
     "$API_HOST$API_PATH")
@@ -181,7 +188,7 @@ else
     -H "Content-Type: application/json; charset=UTF-8" \
     -H "Client-Id: $CLIENT_ID" \
     -H "Request-Time: $REQ_TIME" \
-    -H "Signature: algorithm=RSA256, signature=$REQ_SIGNATURE" \
+    -H "Signature: algorithm=RSA256, signature=$URLENCODED_REQ_SIGNATURE" \
     --data-binary @<(printf "$REQ_BODY") \
     -s -D "$RESP_HEADER_FILE" \
     "$API_HOST$API_PATH")
