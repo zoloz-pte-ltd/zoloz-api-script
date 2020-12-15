@@ -45,7 +45,7 @@ error() {
 info() {
   local content=${1//+/ }
   if [ $VERBOSE -gt 0 ] ; then
-    echo "> $content" >&2
+    echo "$content" | sed 's/^/\> /' >&2
   fi
 }
 
@@ -206,7 +206,7 @@ else
 fi
 
 RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "content-type")
-info "response content type: $RESP_CONTENT_TYPE"
+info "response content type: '$RESP_CONTENT_TYPE'"
 if [[ "$RESP_CONTENT_TYPE" == *"text/plain"* ]] ; then
   RESP_ENCRYPTED_AES_KEY=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "encrypt" "symmetricKey"))
   info "response encrypted symmetric key: $RESP_ENCRYPTED_AES_KEY"
