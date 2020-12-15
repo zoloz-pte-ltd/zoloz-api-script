@@ -39,21 +39,18 @@ parse_header() {
 }
 
 error() {
-  local content=${1//+/ }
-  echo $"$content" >&2
+  echo "$@" >&2
 }
 
 info() {
-  local content=${1//+/ }
   if [ $VERBOSE -gt 0 ] ; then
-    echo $"$content" | sed 's/^/\> /' >&2
+    echo "$@" | sed 's/^/\> /' >&2
   fi
 }
 
 debug() {
-  local content=${1//+/ }
   if [ $VERBOSE -gt 1 ] ; then
-    echo $"$content" | sed 's/^/\>\> /' >&2
+    echo "$@" | sed 's/^/\>\> /' >&2
   fi
 }
 
