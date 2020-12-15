@@ -40,14 +40,14 @@ parse_header() {
 # set -x
 
 # Initialize variables default:
-clientid='2089012345678900'
-privkey='merchant-priv-key.pem'
-pubkey='zoloz-pub-key.pem'
-payload='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
-api='/api/v1/zoloz/authentication/test'
-reqtime=$(date +%F'T'%T%z)
-host='https://sg-production-api.zoloz.com'
-encryption=0
+CLIENT_ID='2089012345678900'
+MERCHANT_PRIVATE_KEY_FILE='merchant-priv-key.pem'
+ZOLOZ_PUBLIC_KEY_FILE='zoloz-pub-key.pem'
+REQ_DATA='{\n  "title": "hello",\n  "description": "just for demonstration."\n}'
+API_PATH='/api/v1/zoloz/authentication/test'
+REQ_TIME=$(date +%F'T'%T%z)
+API_HOST='https://sg-production-api.zoloz.com'
+ENCRYPTION=0
 
 OPTIND=1
 while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:l" opt; do
@@ -56,29 +56,29 @@ while getopts ":?hvc:p:P:c:a:d:f:H:ek:t:l" opt; do
         show_help
         exit 0
         ;;
-    v)  verbose=1
+    v)  VERBOSE=1
         ;;
-    t)  reqtime=$OPTARG
+    t)  REQ_TIME=$OPTARG
         ;;
-    c)  clientid=$OPTARG
+    c)  CLIENT_ID=$OPTARG
         ;;
-    P)  privkey=$OPTARG
+    P)  MERCHANT_PRIVATE_KEY_FILE=$OPTARG
         ;;
-    p)  pubkey=$OPTARG
+    p)  ZOLOZ_PUBLIC_KEY_FILE=$OPTARG
         ;;
-    a)  api=$OPTARG
+    a)  API_PATH=$OPTARG
         ;;
-    H)  host=$OPTARG
+    H)  API_HOST=$OPTARG
         ;;
-    e)  encryption=1
+    e)  ENCRYPTION=1
         ;;
-    k)  aeskey=$OPTARG
+    k)  REQ_AES_KEY=$OPTARG
         ;;
-    d)  payload=$OPTARG
+    d)  REQ_DATA=$OPTARG
         ;;
-    f)  infile=$OPTARG
+    f)  IN_FILE=$OPTARG
         ;;
-    l)  skip_response_validation=1
+    l)  SKIP_RESP_VERIFY=1
         ;;
     :)
       echo "$0: Must supply an argument to -$OPTARG." >&2
@@ -93,108 +93,105 @@ done
 shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
-if [ "$clientid" == "" ] ; then
+if [ "$CLIENT_ID" == "" ] ; then
     echo "client id is not specified." >&2
     exit -1
 fi
 
-if [ "$privkey" == "" ] ; then
+if [ "$MERCHANT_PRIVATE_KEY_FILE" == "" ] ; then
     echo "merchant private key is not specified." >&2
     exit -1
 fi
 
-if [ "$pubkey" == "" ] ; then
+if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
     echo "zoloz private key is not specified." >&2
     exit -1
 fi
 
-echo "client id: $clientid"
-echo "merchant private key file: $privkey"
-echo "zoloz public key file: $pubkey"
-echo "request time: $reqtime"
-echo "host: $host"
-echo "api: $api"
+echo "client id: $CLIENT_ID"
+echo "merchant private key file: $MERCHANT_PRIVATE_KEY_FILE"
+echo "zoloz public key file: $ZOLOZ_PUBLIC_KEY_FILE"
+echo "api host: $API_HOST"
+echo "api path: $API_PATH"
+echo "request time: $REQ_TIME"
 
-echo "encryption: $encryption"
-if [ "$encryption" == "1" ] ; then
-    if [ "$aeskey" == "" ] ; then
-        export LC_CTYPE=C; aeskey=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
+echo "encryption: $ENCRYPTION"
+if [ "$ENCRYPTION" == "1" ] ; then
+    if [ "$REQ_AES_KEY" == "" ] ; then
+        export LC_CTYPE=C; REQ_AES_KEY=$(cat /dev/urandom | tr -dc 'A-F0-9' | fold -w 32 | head -n 1)
     fi
-    echo "aes128 key: 0x$aeskey"
+    echo "aes128 key: 0x$REQ_AES_KEY"
 
-    enckey=$(printf $aeskey | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey "$pubkey" | base64)
-    echo "encrypted aes128 key: $enckey"
+    REQ_ENCRYPTED_AES_KEY=$(printf $REQ_AES_KEY | xxd -r -p | openssl rsautl -encrypt -pkcs -pubin -inkey "$ZOLOZ_PUBLIC_KEY_FILE" | base64)
+    echo "encrypted aes128 key: $REQ_ENCRYPTED_AES_KEY"
 
-    body=$(printf "$payload" | openssl enc -e -aes-128-ecb -K $aeskey | base64)
+    REQ_BODY=$(printf "$REQ_DATA" | openssl enc -e -aes-128-ecb -K $REQ_AES_KEY | base64)
 else
-    body="$payload"
+    REQ_BODY="$REQ_DATA"
 fi
+echo "request body: '$RESP_BODY'"
 
-content="POST $api\n$clientid.$reqtime.$body"
-echo "content: '$content'"
+REQ_SIGN_CONTENT="POST $API_PATH\n$CLIENT_ID.$REQ_TIME.$REQ_BODY"
+echo "request content to be signed: '$REQ_SIGN_CONTENT'"
 
-signature=$(printf "$content" | openssl dgst -sign $privkey -keyform PEM -sha256 | base64)
-echo "signature: $signature"
+REQ_SIGNATURE=$(urlsafe_encode $(printf "$REQ_SIGN_CONTENT" | openssl dgst -sign $MERCHANT_PRIVATE_KEY_FILE -keyform PEM -sha256 | base64))
+echo "request signature: $REQ_SIGNATURE"
 
-url="$host$api"
-echo "url: $url"
+RESP_HEADER_FILE=$(mktemp)
+echo "temporary response header file: $RESP_HEADER_FILE"
 
-resp_header_file=$(mktemp)
-echo "temporary response header file: $resp_header_file"
-
-if [ "$encryption" == "1" ] 
+if [ "$ENCRYPTION" == "1" ] 
 then
-  respbody=$(curl \
+  RESP_BODY=$(curl \
     -H "Content-Type: text/plain" \
-    -H "Client-Id: $clientid" \
-    -H "Request-Time: $reqtime" \
-    -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
-    -d "$body" \
-    -s -D "$resp_header_file" \
-    "$url")
+    -H "Client-Id: $CLIENT_ID" \
+    -H "Request-Time: $REQ_TIME" \
+    -H "Signature: algorithm=RSA256, signature=$REQ_SIGNATURE" \
+    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $REQ_ENCRYPTED_AES_KEY)" \
+    -d "$REQ_BODY" \
+    -s -D "$RESP_HEADER_FILE" \
+    "$API_HOST$API_PATH")
 else
-  respbody=$(curl \
+  RESP_BODY=$(curl \
     -H "Content-Type: application/json; charset=UTF-8" \
-    -H "Client-Id: $clientid" \
-    -H "Request-Time: $reqtime" \
-    -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    --data-binary @<(printf "$body") \
-    -s -D "$resp_header_file" \
-    "$url")
+    -H "Client-Id: $CLIENT_ID" \
+    -H "Request-Time: $REQ_TIME" \
+    -H "Signature: algorithm=RSA256, signature=$REQ_SIGNATURE" \
+    --data-binary @<(printf "$REQ_BODY") \
+    -s -D "$RESP_HEADER_FILE" \
+    "$API_HOST$API_PATH")
 fi
 
-echo "response body: '$respbody'"
-resp_header=$(cat "$resp_header_file")
-echo $"response header: \n$resp_header"
-resp_signature=$(urlsafe_decode $(parse_header "$resp_header_file" "signature" "signature"))
-echo "response signature: $resp_signature"
-resptime=$(parse_header "$resp_header_file" "response-time")
-echo "response time: $resptime"
+echo "response body: '$RESP_BODY'"
+RESP_HEADER=$(cat "$RESP_HEADER_FILE")
+echo $"response header: \n$RESP_HEADER"
+RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
+echo "response signature: $RESP_SIGNATURE"
+RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
+echo "response time: $RESP_TIME"
 
-content="POST "$api"\n"$clientid"."$resptime".""$respbody"
-echo "content to be verified: '$content'"
+RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
+echo "response content to be verified: '$RESP_SIGN_CONTENT'"
 
-if [ "$skip_response_validation" == "1" ] ; then
-  echo "skip response validation" >&2
+if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
+  echo "skip verifying response signature" >&2
 else
-  # verify the signature using zoloz public key
-  verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature <(printf $resp_signature | base64 -d))
-  echo $verify_resp
-  if [ "$verify_resp" != "Verified OK" ] ; then
+  RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
+  echo "verify response signature: $RESP_VERIFY_RESULT"
+  if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
     exit -1
   fi
 fi
 
-resp_content_type=$(parse_header "$resp_header_file" "content-type")
-echo "response content type: $resp_content_type"
-if [[ "$resp_content_type" == *"text/plain"* ]] ; then
-  resp_enckey=$(urlsafe_decode $(parse_header "$resp_header_file" "encrypt" "symmetricKey"))
-  echo "response encrypted symmetric key: $resp_enckey"
-  resp_aeskey=$(printf "$resp_enckey" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$privkey" | xxd -u -p)
-  echo "response symmetric key: 0x$resp_aeskey"
-  resp_content=$(printf "$respbody" | base64 -d | openssl enc -d -aes-128-ecb -K "$resp_aeskey")
+RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "content-type")
+echo "response content type: $RESP_CONTENT_TYPE"
+if [[ "$RESP_CONTENT_TYPE" == *"text/plain"* ]] ; then
+  RESP_ENCRYPTED_AES_KEY=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "encrypt" "symmetricKey"))
+  echo "response encrypted symmetric key: $RESP_ENCRYPTED_AES_KEY"
+  RESP_AES_KEY=$(printf "$RESP_ENCRYPTED_AES_KEY" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$MERCHANT_PRIVATE_KEY_FILE" | xxd -u -p)
+  echo "response symmetric key: 0x$RESP_AES_KEY"
+  RESP_DATA=$(printf "$RESP_BODY" | base64 -d | openssl enc -d -aes-128-ecb -K "$RESP_AES_KEY")
 else
-  resp_content=$respbody
+  RESP_DATA=$RESP_BODY
 fi
-echo "response content: $resp_content"
+echo "response content: $RESP_DATA"
