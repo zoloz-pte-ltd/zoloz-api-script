@@ -1,5 +1,4 @@
-#!/bin/sh
-
+#!/bin/bash 
 urlsafe_encode() {
   local length="${#1}"
   for (( i = 0; i < length; i++ )); do
@@ -140,7 +139,7 @@ echo "url: $url"
 
 if [ "$encryption" == "1" ] 
 then
-  curl \
+  respbody=$(curl \
     -H "Content-Type: text/plain" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
@@ -148,23 +147,18 @@ then
     -H "Encrypt: algorithm=RSA_AES, symmetricKey=$(urlsafe_encode $enckey)" \
     -d "$body" \
     -s -D header \
-    -o respbody \
-    "$url"
-  printf "$respbody" >> respbody
+    "$url")
 else
-  printf "$body" > tmp
-  curl \
+  respbody=$(curl \
     -H "Content-Type: application/json; charset=UTF-8" \
     -H "Client-Id: $clientid" \
     -H "Request-Time: $reqtime" \
     -H "Signature: algorithm=RSA256, signature=$(urlsafe_encode $signature)" \
-    --data-binary @tmp \
+    --data-binary @<(printf "$body") \
     -s -D header \
-    -o respbody \
-    "$url"
+    "$url")
 fi
 
-respbody=$(cat respbody)
 echo "response body: '$respbody'"
 resp_signature=$(urlsafe_decode $(parse_header header "signature" "signature"))
 echo "response signature: $resp_signature"
@@ -174,12 +168,8 @@ echo "response time: $resptime"
 content="POST "$api"\n"$clientid"."$resptime".""$respbody"
 echo "content to be verified: '$content'"
 
-printf $resp_signature \
-| base64 -d \
-> resp_signature.bin #save the signature of response into resp_signature.bin file
-
 # verify the signature using zoloz public key
-verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature resp_signature.bin)
+verify_resp=$(printf "$content" | openssl dgst -verify "$pubkey" -keyform PEM -sha256 -signature <(printf $resp_signature | base64 -d))
 echo $verify_resp
 
 if [ "$verify_resp" != "Verified OK" ] ; then
