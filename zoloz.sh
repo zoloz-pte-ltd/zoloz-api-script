@@ -20,7 +20,7 @@ show_help() {
   echo '
     SYNOPSIS
     zoloz.sh [-h|-?]
-    zoloz.sh [-v|-vv] <-c <client id>> <-P <merchant private key file> <-p <zoloz public key file> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
+    zoloz.sh [-v|-vv] <-c <client id>> <-P <merchant private key file>> <-p <zoloz public key file>> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
 
     DESCRIPTION
     This is a utility script to call ZOLOZ API.
@@ -43,7 +43,7 @@ show_help() {
     zoloz.sh -h
     zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
     zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d '"'"'{"foo": "bar"}'"'"'
-    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d request_data.txt
+    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d @request_data.txt
 '
 }
 
