@@ -17,10 +17,10 @@ urlsafe_decode() {
 }
 
 show_help() {
-  echo '
+  echo "
     SYNOPSIS
-    zoloz.sh [-h|-?]
-    zoloz.sh [-v|-vv] <-c <client id>> <-P <merchant private key file>> <-p <zoloz public key file>> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
+    $0 [-h|-?]
+    $0 [-v|-vv] <-c <client id>> <-P <merchant private key file>> <-p <zoloz public key file>> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
 
     DESCRIPTION
     This is a utility script to call ZOLOZ API.
@@ -31,7 +31,8 @@ show_help() {
     -p <zoloz public key file>      Set zoloz public key
     -H <API host>                   Set API host (default=https://sg-production-api.zoloz.com)
     -a <API path>                   Set API path (default=/api/v1/zoloz/authentication/test)
-    -d <request data or data file>  Set request data or data file (set file by prepend @), if not specified, will read request data from stdin
+    -d <request data or data file>  Set request data or data file (set file by prepending '@' to file name)
+                                    If not specified, will read request data from stdin
     -e                              Disable request encryption
     -i                              Ignore failure on verifying response signature
     -k <AES128 key>                 For debugging, use specified AES128 key to encrypt request instead of a randomly generated key
@@ -40,11 +41,11 @@ show_help() {
     -h                              Print this help
 
     EXAMPLES
-    zoloz.sh -h
-    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
-    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d '"'"'{"foo": "bar"}'"'"'
-    zoloz.sh -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d @request_data.txt
-'
+    $0 -h
+    $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
+    $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d '{\"foo\": \"bar\"}'
+    $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d @request_data.txt
+"
 }
 
 parse_header() {
