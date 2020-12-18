@@ -4,7 +4,7 @@ show_help() {
   echo "
     SYNOPSIS
     $0 [-h|-?]
-    $0 [-v|-vv] <-c <client id>> <-P <merchant private key file>> <-p <zoloz public key file>> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>]
+    $0 -c <client id> -P <merchant private key file> -p <zoloz public key file> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>] [-v|-vv]
 
     DESCRIPTION
     This is a utility script to call ZOLOZ API.
