@@ -33,9 +33,9 @@ show_help() {
 }
 
 parse_header() {
-  local header_file=${1//+/ }
-  local header_key=${2//+/ }
-  local subkey=${3//+/ }
+  local header_file=$1
+  local header_key=$2
+  local subkey=$3
   local header_line=$(grep "$header_key: " "$header_file" | head -1 | tr -d '\r\n')
   local header_val=${header_line##*": "}
   if [ "$subkey" == "" ] ; then
