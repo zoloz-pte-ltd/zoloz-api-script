@@ -206,29 +206,25 @@ URLENCODED_REQ_SIGNATURE=$(urlsafe_encode $REQ_SIGNATURE)
 info "urlencoded request signature: $URLENCODED_REQ_SIGNATURE"
 info
 
-
 RESP_HEADER_FILE=$(mktemp)
-if [ "$ENCRYPTION" == "1" ] 
-then
-  RESP_BODY=$(curl \
-    -H "Content-Type: text/plain" \
-    -H "Client-Id: $CLIENT_ID" \
-    -H "Request-Time: $REQ_TIME" \
-    -H "Signature: algorithm=RSA256, signature=$URLENCODED_REQ_SIGNATURE" \
-    -H "Encrypt: algorithm=RSA_AES, symmetricKey=$URLENCODED_REQ_ENCRYPTED_AES_KEY" \
-    -d "$REQ_BODY" \
-    -s -D "$RESP_HEADER_FILE" \
-    "$API_HOST$API_PATH")
+CURL_OPTIONS=(
+    "HClient-Id: ${CLIENT_ID}" \
+    "HRequest-Time: ${REQ_TIME}" \
+    "HSignature: algorithm=RSA256, signature=${URLENCODED_REQ_SIGNATURE}" \
+    "D${RESP_HEADER_FILE}" \
+    "s"
+)
+if [ "$ENCRYPTION" == "1" ] ; then
+  CURL_OPTIONS+=(
+    "HContent-Type: text/plain; charset=UTF-8" \
+    "HEncrypt: algorithm=RSA_AES, symmetricKey=${URLENCODED_REQ_ENCRYPTED_AES_KEY}" \
+  )
 else
-  RESP_BODY=$(curl \
-    -H "Content-Type: application/json; charset=UTF-8" \
-    -H "Client-Id: $CLIENT_ID" \
-    -H "Request-Time: $REQ_TIME" \
-    -H "Signature: algorithm=RSA256, signature=$URLENCODED_REQ_SIGNATURE" \
-    --data-binary @<(printf "$REQ_BODY") \
-    -s -D "$RESP_HEADER_FILE" \
-    "$API_HOST$API_PATH")
+  CURL_OPTIONS+=(
+    "HContent-Type: application/json; charset=UTF-8" \
+  )
 fi
+RESP_BODY=$(curl "${CURL_OPTIONS[@]/#/-}" --data-binary @<(printf "$REQ_BODY") "${API_HOST}${API_PATH}")
 
 if [ "$?" != "0" ] ; then
   error "failed to request $API_HOST$API_PATH"
