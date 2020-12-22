@@ -261,7 +261,7 @@ debug "response body: '$RESP_BODY'"
 info
 
 if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
-  info "skip verifying response signature" >&2
+  info "skip verifying response signature"
 else
   RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
   info "response signature: $RESP_SIGNATURE"
@@ -271,8 +271,9 @@ else
   debug "response content to be verified: '$RESP_SIGN_CONTENT'"
 
   RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
+  info "response signature verification result: '$RESP_VERIFY_RESULT'"
   if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
-    error "verify response signature: $RESP_VERIFY_RESULT"
+    error "response signature verification failed"
     exit 5
   fi
 fi
