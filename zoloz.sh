@@ -167,7 +167,7 @@ if [ "$MERCHANT_PRIVATE_KEY_FILE" == "" ] ; then
 fi
 
 if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
-    error "zoloz private key is not specified."
+    error "zoloz public key is not specified."
     exit 3
 fi
 
