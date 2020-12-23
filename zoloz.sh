@@ -24,7 +24,7 @@ show_help() {
   echo "
     SYNOPSIS
     $0 [-h|-?]
-    $0 -c <client id> -P <merchant private key file> -p <zoloz public key file> [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>] [-v|-vv]
+    $0 -c <client id> -P <merchant private key file> (-p <zoloz public key file>|-K <zoloz public key content>) [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>] [-v|-vv]
 
     DESCRIPTION
     This is a utility script to call ZOLOZ API.
@@ -32,7 +32,9 @@ show_help() {
     OPTIONS
     -c <client id>                  Set client Id
     -P <merchant private key file>  Set merchant private key
-    -p <zoloz public key file>      Set zoloz public key
+    -p <zoloz public key file>      Set zoloz public key by providing PEM file
+    -K <zoloz public key content>   Set zoloz public key by providing base64 encoded key content
+                                    If key file (-p) is specified, this option will be ignored
     -H <API host>                   Set API host (default=https://sg-production-api.zoloz.com)
     -a <API path>                   Set API path (default=/api/v1/zoloz/authentication/test)
     -d <request data or data file>  Set request data or data file (set file by prepending '@' to file name)
@@ -47,6 +49,7 @@ show_help() {
     EXAMPLES
     $0 -h
     $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
+    $0 -c 2188000123456789 -P merchant_private_key.pem -K 'dummy/base64/string/of/key/content'
     $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d '{\"foo\": \"bar\"}'
     $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem -d @request_data.txt
 "
@@ -119,7 +122,7 @@ if [ $# -eq 0 ]; then
 fi
 
 OPTIND=1
-while getopts ":?hvc:p:P:H:a:d:eik:t:" opt; do
+while getopts ":?hvc:p:P:K:H:a:d:eik:t:" opt; do
   case "$opt" in
   h|\?)
     show_help
@@ -132,6 +135,8 @@ while getopts ":?hvc:p:P:H:a:d:eik:t:" opt; do
   P)  MERCHANT_PRIVATE_KEY_FILE=$OPTARG
     ;;
   p)  ZOLOZ_PUBLIC_KEY_FILE=$OPTARG
+    ;;
+  K)  ZOLOZ_PUBLIC_KEY_DATA=$OPTARG
     ;;
   H)  API_HOST=$OPTARG
     ;;
@@ -157,18 +162,25 @@ shift $((OPTIND-1))
 [ "${1:-}" = "--" ] && shift
 
 if [ "$CLIENT_ID" == "" ] ; then
-    error "client id is not specified."
-    exit 3
+  error "client id is not specified."
+  exit 3
 fi
 
 if [ "$MERCHANT_PRIVATE_KEY_FILE" == "" ] ; then
-    error "merchant private key is not specified."
-    exit 3
+  error "merchant private key is not specified."
+  exit 3
+fi
+
+if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] && [ "$ZOLOZ_PUBLIC_KEY_DATA" == "" ] ; then
+  error "zoloz public key is not specified."
+  exit 3
 fi
 
 if [ "$ZOLOZ_PUBLIC_KEY_FILE" == "" ] ; then
-    error "zoloz public key is not specified."
-    exit 3
+  ZOLOZ_PUBLIC_KEY_FILE=$(mktemp)
+  echo "-----BEGIN PUBLIC KEY-----" >$ZOLOZ_PUBLIC_KEY_FILE
+  echo "$ZOLOZ_PUBLIC_KEY_DATA" | fold -w 64 >>$ZOLOZ_PUBLIC_KEY_FILE
+  echo "-----END PUBLIC KEY-----" >>$ZOLOZ_PUBLIC_KEY_FILE
 fi
 
 if [[ "$REQ_DATA" == "" ]] ; then
