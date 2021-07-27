@@ -256,6 +256,10 @@ else
     "HContent-Type: application/json; charset=UTF-8" \
   )
 fi
+if [ $VERBOSE -gt 1 ] ; then
+  CURL_OPTIONS+=(v)
+fi
+
 RESP_BODY=$(curl "${CURL_OPTIONS[@]/#/-}" --data-binary @<(printf "$REQ_BODY") "${API_HOST}${API_PATH}")
 
 if [ "$?" != "0" ] ; then
