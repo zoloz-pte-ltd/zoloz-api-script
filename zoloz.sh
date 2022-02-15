@@ -25,10 +25,8 @@ show_help() {
     SYNOPSIS
     $0 [-h|-?]
     $0 -c <client id> -P <merchant private key file> (-p <zoloz public key file>|-K <zoloz public key content>) [-a <api path>] [-H <api host>] [-d <request data or file>] [-e] [-i] [-k <aes128 key>] [-t <request time>] [-v|-vv]
-
     DESCRIPTION
     This is a utility script to call ZOLOZ API.
-
     OPTIONS
     -c <client id>                  Set client Id
     -P <merchant private key file>  Set merchant private key
@@ -45,7 +43,6 @@ show_help() {
     -t <request time>               For debugging, use specified request time instead of current time
     -v                              More verbose
     -h                              Print this help
-
     EXAMPLES
     $0 -h
     $0 -c 2188000123456789 -P merchant_private_key.pem -p zoloz_public_key.pem
@@ -62,7 +59,7 @@ parse_header() {
   local header_line=$(grep "$header_key: " "$header_file" | head -1 | tr -d '\r\n')
   local header_val=${header_line##*": "}
   if [ "$subkey" == "" ] ; then
-    echo -n "$header_val"
+    echo "$header_val"
   else
     remain=$header_val", "
     while [[ $remain ]]; do
@@ -73,7 +70,7 @@ parse_header() {
       fi
       remain=${remain#*", "};
     done;
-    echo -n "$subval"
+    echo "$subval"
   fi
 }
 
@@ -260,7 +257,9 @@ if [ $VERBOSE -gt 1 ] ; then
   CURL_OPTIONS+=(v)
 fi
 
-RESP_BODY=$(curl "${CURL_OPTIONS[@]/#/-}" --data-binary @<(printf "$REQ_BODY") "${API_HOST}${API_PATH}")
+REQ_BODY_FILE=$(mktemp)
+printf "$REQ_BODY" > $REQ_BODY_FILE
+RESP_BODY=$(curl "${CURL_OPTIONS[@]/#/-}" --http1.1 -d @$REQ_BODY_FILE "${API_HOST}${API_PATH}")
 
 if [ "$?" != "0" ] ; then
   error "failed to request $API_HOST$API_PATH"
@@ -279,14 +278,16 @@ info
 if [ "$SKIP_RESP_VERIFY" == "1" ] ; then
   info "skip verifying response signature"
 else
-  RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "signature" "signature"))
+  RESP_SIGNATURE=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "Signature" "signature"))
   info "response signature: $RESP_SIGNATURE"
-  RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "response-time")
+  RESP_TIME=$(parse_header "$RESP_HEADER_FILE" "Response-Time")
   info "response time: $RESP_TIME"
   RESP_SIGN_CONTENT="POST "$API_PATH"\n"$CLIENT_ID"."$RESP_TIME".""$RESP_BODY"
   debug "response content to be verified: '$RESP_SIGN_CONTENT'"
 
-  RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature <(printf $RESP_SIGNATURE | base64 -d))
+  RESP_SIGNATURE_FILE=$(mktemp)
+  printf $RESP_SIGNATURE | base64 -d > $RESP_SIGNATURE_FILE
+  RESP_VERIFY_RESULT=$(printf "$RESP_SIGN_CONTENT" | openssl dgst -verify "$ZOLOZ_PUBLIC_KEY_FILE" -keyform PEM -sha256 -signature $RESP_SIGNATURE_FILE)
   info "response signature verification result: '$RESP_VERIFY_RESULT'"
   if [ "$RESP_VERIFY_RESULT" != "Verified OK" ] ; then
     error "response signature verification failed"
@@ -295,10 +296,10 @@ else
 fi
 info
 
-RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "content-type")
+RESP_CONTENT_TYPE=$(parse_header "$RESP_HEADER_FILE" "Content-Type")
 info "response content type: '$RESP_CONTENT_TYPE'"
 if [[ "$RESP_CONTENT_TYPE" == *"text/plain"* ]] ; then
-  RESP_ENCRYPTED_AES_KEY=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "encrypt" "symmetricKey"))
+  RESP_ENCRYPTED_AES_KEY=$(urlsafe_decode $(parse_header "$RESP_HEADER_FILE" "Encrypt" "symmetricKey"))
   info "response encrypted symmetric key: $RESP_ENCRYPTED_AES_KEY"
   RESP_AES_KEY=$(printf "$RESP_ENCRYPTED_AES_KEY" | base64 -d | openssl rsautl -decrypt -pkcs -inkey "$MERCHANT_PRIVATE_KEY_FILE" | xxd -u -p)
   info "response symmetric key: 0x$RESP_AES_KEY"
